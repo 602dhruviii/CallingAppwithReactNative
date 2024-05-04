@@ -15,9 +15,9 @@ import {
   ChannelProfileType,
 } from 'react-native-agora';
 
-const appId = 'da66ab31fbdf4bb8b2a51912610e591e';
+const appId = 'enter-your-appid';
 const channelName = 'dhruvicalling';
-const token = 'e56f5b32edb9486a91db8522b6c1f158f';
+const token = 'enter-your-tokenid';
 const uid = 0;
 
 const App = () => {
