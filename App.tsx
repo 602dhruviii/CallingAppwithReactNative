@@ -1,118 +1,187 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   SafeAreaView,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
+  TouchableOpacity,
 } from 'react-native';
-
+import { PermissionsAndroid, Platform } from 'react-native';
 import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+  ClientRoleType,
+  createAgoraRtcEngine,
+  IRtcEngine,
+  ChannelProfileType,
+} from 'react-native-agora';
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+const appId = 'da66ab31fbdf4bb8b2a51912610e591e';
+const channelName = 'dhruvicalling';
+const token = 'e56f5b32edb9486a91db8522b6c1f158f';
+const uid = 0;
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+const App = () => {
+  const agoraEngineRef = useRef<IRtcEngine>(); // Agora engine instance
+  const [isJoined, setIsJoined] = useState(false); // Indicates if the local user has joined the channel
+  const [remoteUid, setRemoteUid] = useState(0); // Uid of the remote user
+  const [message, setMessage] = useState(''); // Message to the user
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  useEffect(() => {
+    // Initialize Agora engine when the app starts
+    setupVoiceSDKEngine();
+  }, []);
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
+  const join = async () => {
+    if (isJoined) {
+      return;
+    }
+    try {
+      agoraEngineRef.current?.setChannelProfile(
+        ChannelProfileType.ChannelProfileCommunication,
+      );
+      agoraEngineRef.current?.joinChannel(token, channelName, uid, {
+        clientRoleType: ClientRoleType.ClientRoleBroadcaster,
+      });
+    } catch (e) {
+      console.log(e);
+    }
   };
 
+  const setupVoiceSDKEngine = async () => {
+    try {
+      // use the helper function to get permissions
+      if (Platform.OS === 'android') {
+        await getPermission();
+      }
+      agoraEngineRef.current = createAgoraRtcEngine();
+      const agoraEngine = agoraEngineRef.current;
+      agoraEngine.registerEventHandler({
+        onJoinChannelSuccess: () => {
+          showMessage('Successfully joined the channel ' + channelName);
+          setIsJoined(true);
+        },
+        onUserJoined: (_connection, Uid) => {
+          showMessage('Remote user joined with uid ' + Uid);
+          setRemoteUid(Uid);
+        },
+        onUserOffline: (_connection, Uid) => {
+          showMessage('Remote user left the channel. uid: ' + Uid);
+          setRemoteUid(0);
+        },
+      });
+      agoraEngine.initialize({
+        appId: appId,
+      });
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  const leave = () => {
+    try {
+      agoraEngineRef.current?.leaveChannel();
+      setRemoteUid(0);
+      setIsJoined(false);
+      showMessage('You left the channel');
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
+  function showMessage(msg: string) {
+    setMessage(msg);
+  }
+
   return (
-    <SafeAreaView style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        style={backgroundStyle}>
-        <Header />
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.header}>Calling App</Text>
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity onPress={join} style={styles.joinButton}>
+          <Text style={styles.buttonText}>Join</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={leave} style={styles.leaveButton}>
+          <Text style={styles.buttonText}>Leave</Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContainer}>
+        {isJoined ? (
+          <Text style={styles.infoText}>Local user uid: {uid}</Text>
+        ) : (
+          <Text style={styles.infoText}>Join a channel</Text>
+        )}
+        {isJoined && remoteUid !== 0 ? (
+          <Text style={styles.infoText}>Remote user uid: {remoteUid}</Text>
+        ) : (
+          <Text style={styles.infoText}>Waiting for a remote user to join</Text>
+        )}
+        <Text style={styles.messageText}>{message}</Text>
       </ScrollView>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
   },
-  sectionTitle: {
+  header: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: 'bold',
+    marginVertical: 20,
   },
-  sectionDescription: {
-    marginTop: 8,
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  joinButton: {
+    paddingHorizontal: 25,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#4CAF50',
+    margin: 5,
+  },
+  leaveButton: {
+    paddingHorizontal: 25,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#E57373',
+    margin: 5,
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  scroll: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    width: '90%',
+    padding: 10,
+    borderRadius: 8,
+  },
+  scrollContainer: {
+    alignItems: 'center',
+  },
+  infoText: {
     fontSize: 18,
-    fontWeight: '400',
+    marginVertical: 10,
   },
-  highlight: {
-    fontWeight: '700',
+  messageText: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#555555',
   },
 });
+
+const getPermission = async () => {
+  if (Platform.OS === 'android') {
+    await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+    ]);
+  }
+};
 
 export default App;
